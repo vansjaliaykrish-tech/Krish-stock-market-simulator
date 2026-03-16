@@ -1,0 +1,988 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Advanced Stock Market Simulator</title>
+
+<style>
+
+body{
+background:#0f172a;
+font-family:Arial;
+color:white;
+margin:0;
+}
+
+.header{
+background:#1e293b;
+padding:15px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+flex-wrap:wrap;
+}
+
+.tabs button{
+margin-left:8px;
+padding:6px 12px;
+cursor:pointer;
+}
+
+.news{
+background:#020617;
+padding:10px;
+color:#fbbf24;
+font-weight:bold;
+}
+
+.market{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+gap:15px;
+padding:20px;
+}
+
+.card{
+background:#1e293b;
+padding:12px;
+border-radius:10px;
+border:1px solid #334155;
+}
+
+.card.owned{
+border:2px solid #22c55e;
+}
+
+.price{
+font-size:20px;
+font-weight:bold;
+}
+
+.up{color:#22c55e;}
+.down{color:#ef4444;}
+
+button{
+border:none;
+padding:6px;
+cursor:pointer;
+}
+
+.buy{background:#22c55e}
+.sell{background:#ef4444}
+.max{background:#3b82f6}
+
+.summary{
+background:#1e293b;
+padding:10px;
+margin:10px;
+border-radius:8px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="intro" style="
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:#000;
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:9999;
+">
+
+<img src="C:\Users\vansj\Music\OneDrive\Pictures\Documents\Desktop\stock-simulator\logo.png.png" style="width:500px;max-width:90%;">
+
+</div>
+
+<div class="header">
+
+<div>
+Created by: <b>Krish Vansjaliya</b>
+</div>
+
+<div>
+Cash ₹<span id="cash">0</span>
+</div>
+
+<div>
+Portfolio ₹<span id="portfolio">0</span>
+</div>
+
+<div>
+Market: <span id="marketMood">UNKNOWN</span>
+</div>
+
+<div class="tabs">
+<button onclick="tab='market';render()">Market</button>
+<button onclick="tab='portfolio';render()">Portfolio</button>
+</div>
+
+</div>
+
+<div class="news" id="news">
+Welcome to the Stock Exchange
+</div>
+
+<div class="news" id="news">
+
+<div id="top" class="summary"></div>
+
+<div id="portfolioSummary" class="summary"></div>
+
+<div class="market" id="display"></div>
+
+<div style="text-align:center;color:#94a3b8;margin:15px;font-size:14px;">
+Stock Market Simulator • Developed by <b>Krish Vansjaliya</b>
+</div>
+
+
+<script>
+
+let userTrading = false
+
+let qtyMemory = {}
+
+/* =================================
+GLOBAL VARIABLES
+================================= */
+
+let cash = 1000000
+let fee = 0.002
+let tab = "market"
+let marketMood = "stable"
+let marketTarget = 0
+let pendingEvents = []
+let newsHistory = []
+
+/* =================================
+SECTOR DEFINITIONS
+================================= */
+
+let sectors = {
+
+Technology:[
+"Infobyte","NextAI","CloudNova","PixelWare","QuantumSoft",
+"NanoLogic","FutureChip","CyberCore","TechForge","TimeTek"
+],
+
+Energy:[
+"AddaniEnergy","SolarisPower","VoltStream","GreenVolt","HydroGrid",
+"FusionEnergy","PowerNova","EcoFuel","SunSpark","TerraEnergy"
+],
+
+Finance:[
+"JMSFinance","CapitalEdge","PrimeInvest","SilverBank","GlobalTrust",
+"WealthCore","SafeFund","MarketFlow","FortuneHold","EquityBridge"
+],
+
+Consumer:[
+"UrbanMart","FreshFoods","DailyNeeds","SmartLiving","PrimeRetail",
+"ValueShop","CityMarket","QuickBuy","HomeChoice","MegaStore"
+],
+
+Automobile:[
+"TetraMotors","AddaniAuto","RelionMotors","TurboDrive","SpeedNovaCars",
+"VelocityCars","UrbanDrive","TitanAuto","ApexMotors","HyperDrive"
+]
+
+}
+
+/* =================================
+STOCK DATABASE
+================================= */
+
+let stocks = []
+let id = 0
+
+for(let sector in sectors){
+
+sectors[sector].forEach(name=>{
+
+stocks.push({
+id:id,
+name:name,
+sector:sector,
+price:Math.random()*400+100,
+prev:0,
+owned:0,
+avg:0,
+volume:Math.random()*5+1
+})
+
+id++
+
+})
+
+}
+
+/* =================================
+TIMER SYSTEM
+================================= */
+
+let timers = {
+sector:120,
+stock:240,
+dividend:180
+}
+
+
+
+/* =================================
+TRADING SYSTEM
+================================= */
+
+function buy(i){
+
+userTrading = true
+
+let s = stocks[i]
+
+let el = document.getElementById("q"+i)
+
+if(!el) return
+
+let qty = parseInt(el.value)
+
+if(!qty || qty<=0){
+userTrading = false
+return
+}
+
+let cost = s.price * qty
+let total = cost + (cost * fee)
+
+if(cash >= total){
+
+let old = s.avg * s.owned
+
+s.owned += qty
+s.avg = (old + cost) / s.owned
+
+cash -= total
+
+}
+
+userTrading = false
+render()
+
+}
+
+
+function sell(i){
+
+userTrading = true
+
+let s = stocks[i]
+
+let qty = parseInt(
+document.getElementById("q"+i)?.value ||
+document.getElementById("ps"+i)?.value
+)
+
+if(!qty || qty<=0){
+userTrading = false
+return
+}
+
+if(qty <= s.owned){
+
+let value = s.price * qty
+let total = value - (value * fee)
+
+cash += total
+s.owned -= qty
+
+}
+
+stocks.forEach(s=>{
+let el = document.getElementById("q"+s.id)
+if(el){
+qtyMemory[s.id] = el.value
+}
+})
+
+userTrading = false
+render()
+
+}
+
+
+/* =================================
+MAX BUY
+================================= */
+
+function maxBuy(i){
+
+let s = stocks[i]
+
+let qty = Math.floor(cash / (s.price*(1+fee)))
+
+let el = document.getElementById("q"+i)
+
+if(el) el.value = qty
+
+}
+
+
+
+/* =================================
+MAX SELL
+================================= */
+
+function maxSell(i){
+
+let s = stocks[i]
+
+let el = document.getElementById("ps"+i)
+
+if(el) el.value = s.owned
+
+}
+
+
+
+/* =================================
+PORTFOLIO CALCULATIONS
+================================= */
+
+function portfolioValue(){
+
+let total = 0
+
+stocks.forEach(s=>{
+total += s.price * s.owned
+})
+
+return total
+
+}
+
+
+
+function netWorth(){
+
+let v = cash
+
+stocks.forEach(s=>{
+v += s.price * s.owned
+})
+
+return v
+
+}
+
+
+
+/* =================================
+PRICE ENGINE
+================================= */
+
+function updatePrices(){
+
+stocks.forEach(s=>{
+
+s.prev = s.price
+
+let step = marketTarget / 30
+
+let liquidityFactor = 1 / s.volume
+
+let noise = (Math.random()*0.01 - 0.005) * liquidityFactor
+
+let change = step + noise
+
+s.price = Math.max(5, s.price * (1 + change))
+
+})
+
+}
+
+
+
+/* =================================
+LIQUIDITY SYSTEM
+================================= */
+
+function initVolume(){
+
+stocks.forEach(s=>{
+
+s.volume = Math.random()*5 + 1
+
+})
+
+}
+
+
+
+/* =================================
+SAVE SYSTEM
+================================= */
+
+function saveGame(){
+
+localStorage.setItem(
+"simSave",
+JSON.stringify({
+cash:cash,
+stocks:stocks
+})
+)
+
+}
+
+
+
+/* =================================
+LOAD SYSTEM
+================================= */
+
+function loadGame(){
+
+let data = localStorage.getItem("simSave")
+
+if(!data) return
+
+let parsed = JSON.parse(data)
+
+cash = parsed.cash
+stocks = parsed.stocks
+
+}
+
+
+
+/* =================================
+STOCK SPLIT CHECK
+================================= */
+
+function stockSplitCheck(){
+
+stocks.forEach(s=>{
+
+if(s.price > 1200){
+
+addNews(s.name+" announced stock split (2:1 in 30s)")
+
+pendingEvents.push({
+
+type:"split",
+stock:s,
+time:Date.now()+30000
+
+})
+
+}
+
+})
+
+}
+
+
+/* =================================
+NEWS HISTORY SYSTEM
+================================= */
+
+function addNews(txt){
+
+newsHistory.unshift(txt)
+
+if(newsHistory.length > 8){
+newsHistory.pop()
+}
+
+document.getElementById("news").innerText = txt
+
+}
+
+
+
+/* =================================
+PENDING EVENT PROCESSOR
+================================= */
+
+
+function processPendingEvents(){
+
+let now = Date.now()
+
+for(let i=pendingEvents.length-1;i>=0;i--){
+
+let e = pendingEvents[i]
+
+if(now >= e.time){
+
+if(e.type === "dividend"){
+
+let payout = e.stock.owned * e.amount
+cash += payout
+
+}
+
+if(e.type === "split"){
+
+e.stock.price /= 2
+e.stock.owned *= 2
+
+}
+
+if(e.type === "ipo"){
+
+stocks.push(e.stock)
+
+}
+
+pendingEvents.splice(i,1)
+
+}
+
+}
+
+}
+
+
+/* =================================
+SECTOR NEWS EVENT
+================================= */
+
+function sectorNews(){
+
+let keys = Object.keys(sectors)
+
+let sec = keys[Math.floor(Math.random()*keys.length)]
+
+let positive = Math.random() > 0.5
+
+stocks.filter(s=>s.sector===sec).forEach(s=>{
+
+let move = Math.random()*0.05 + 0.05
+
+s.price *= positive ? 1+move : 1-move
+
+})
+
+addNews(sec+" sector news affecting companies")
+
+}
+
+
+
+/* =================================
+STOCK NEWS EVENT
+================================= */
+
+function stockNews(){
+
+let s = stocks[Math.floor(Math.random()*stocks.length)]
+
+let positive = Math.random() > 0.5
+
+let move = Math.random()*0.12 + 0.08
+
+s.price *= positive ? 1+move : 1-move
+
+addNews("Breaking: "+s.name+" major company news")
+
+}
+
+
+
+/* =================================
+DIVIDEND EVENT
+================================= */
+
+function dividendEvent(){
+
+let s = stocks[Math.floor(Math.random()*stocks.length)]
+
+let d = Math.random()*4 + 1
+
+addNews(s.name+" announced dividend ₹"+d.toFixed(2)+" (payout in 30s)")
+
+pendingEvents.push({
+
+type:"dividend",
+stock:s,
+amount:d,
+time:Date.now()+30000
+
+})
+
+}
+
+
+
+/* =================================
+IPO SYSTEM
+================================= */
+
+function ipoEvent(){
+
+let baseNames = [
+"NovaTech","QuantumWorks","SkylineCorp","VertexSystems",
+"GreenPulse","TitanDynamics","BlueOrbit","SolarEdge",
+"VelocityLabs","FusionCore","IronPeak","UrbanGrid"
+]
+
+let newName
+
+do{
+
+newName = baseNames[Math.floor(Math.random()*baseNames.length)]
++ Math.floor(Math.random()*900)
+
+} while(stocks.some(s=>s.name===newName))
+
+let sectorsList = Object.keys(sectors)
+
+let sec = sectorsList[Math.floor(Math.random()*sectorsList.length)]
+
+let newStock = {
+
+id:stocks.length,
+name:newName,
+sector:sec,
+price:Math.random()*200+80,
+prev:0,
+owned:0,
+avg:0,
+volume:Math.random()*5+1
+
+}
+
+addNews("IPO announced: "+newName+" (launch in 30s)")
+
+pendingEvents.push({
+
+type:"ipo",
+stock:newStock,
+time:Date.now()+30000
+
+})
+
+}
+
+
+
+/* =================================
+MARKET CONDITION ENGINE
+================================= */
+
+function marketChange(){
+
+let moods = ["bull","crash","stable"]
+
+marketMood = moods[Math.floor(Math.random()*3)]
+
+if(marketMood === "bull"){
+
+// market rises 20%–50%
+marketTarget = Math.random()*0.30 + 0.20
+
+}
+
+else if(marketMood === "crash"){
+
+// market falls 10%–30%
+marketTarget = -(Math.random()*0.20 + 0.10)
+
+}
+
+else{
+
+// stable market (-10% to +20%)
+marketTarget = Math.random()*0.30 - 0.10
+
+}
+
+// hide real condition from player
+document.getElementById("marketMood").innerText = "ACTIVE"
+
+// neutral news instead of revealing bull/crash
+addNews("Global economic signals are influencing the market.")
+
+}
+
+
+
+
+/* =================================
+TOP MOVERS ENGINE
+================================= */
+
+function renderTopMovers(){
+
+let sorted = [...stocks]
+
+sorted.sort((a,b)=>(b.price-b.prev)-(a.price-a.prev))
+
+let gainer = sorted[0]
+
+sorted.sort((a,b)=>(a.price-a.prev)-(b.price-b.prev))
+
+let loser = sorted[0]
+
+document.getElementById("top").innerHTML =
+"🔥 Top Gainer: "+gainer.name+
+" | 💀 Top Loser: "+loser.name
+
+}
+
+
+
+/* =================================
+PORTFOLIO SUMMARY
+================================= */
+
+function renderPortfolioSummary(){
+
+let investment = 0
+let value = 0
+
+stocks.forEach(s=>{
+
+if(s.owned>0){
+
+investment += s.avg * s.owned
+value += s.price * s.owned
+
+}
+
+})
+
+let profit = value - investment
+
+let roi = investment ? ((profit/investment)*100) : 0
+
+document.getElementById("portfolioSummary").innerHTML =
+"Investment ₹"+investment.toFixed(0)+
+" | Value ₹"+value.toFixed(0)+
+" | Profit ₹"+profit.toFixed(0)+
+" | ROI "+roi.toFixed(2)+"%"
+
+}
+
+
+
+/* =================================
+RENDER ENGINE
+================================= */
+
+function render(){
+
+let html=""
+let portfolio=0
+
+renderTopMovers()
+renderPortfolioSummary()
+
+stocks.forEach(s=>{
+
+let ownedClass = s.owned>0 ? "owned" : ""
+
+let diff = s.price - s.prev
+let up = diff >= 0
+
+let val = s.price * s.owned
+
+if(s.owned>0){
+portfolio += val
+}
+
+
+
+/* MARKET PAGE */
+
+if(tab==="market"){
+
+html += `
+
+<div class="card ${ownedClass}">
+
+<b>${s.name}</b><br>
+
+Sector: ${s.sector}<br>
+
+<div class="price ${up?'up':'down'}">
+₹${s.price.toFixed(2)}
+</div>
+
+Owned: ${s.owned}<br>
+
+<input type="number" min="1" id="q${s.id}" value="1" style="width:60px">
+
+<button class="buy" onclick="buy(${s.id})">Buy</button>
+<button class="max" onclick="maxBuy(${s.id})">Max</button>
+<button class="sell" onclick="sell(${s.id})">Sell</button>
+
+</div>
+
+`
+
+}
+
+
+/* PORTFOLIO PAGE */
+
+if(tab==="portfolio" && s.owned>0){
+
+let cost = s.avg * s.owned
+let roi = cost ? ((val-cost)/cost)*100 : 0
+
+html += `
+
+<div class="card owned">
+
+<b>${s.name}</b><br>
+
+Shares: ${s.owned}<br>
+
+Avg ₹${s.avg.toFixed(2)}<br>
+
+Price ₹${s.price.toFixed(2)}<br>
+
+Value ₹${val.toFixed(2)}<br>
+
+ROI ${roi.toFixed(2)}%
+
+<br><br>
+
+<input type="number" min="1" id="ps${s.id}" value="1" style="width:60px">
+
+<button class="sell" onclick="sell(${s.id})">Sell</button>
+<button class="max" onclick="maxSell(${s.id})">Max</button>
+
+</div>
+
+`
+
+}
+
+})
+
+document.getElementById("display").innerHTML = html
+
+stocks.forEach(s=>{
+let el = document.getElementById("q"+s.id)
+if(el && qtyMemory[s.id]){
+el.value = qtyMemory[s.id]
+}
+})
+
+
+document.getElementById("cash").innerText = cash.toFixed(0)
+
+document.getElementById("portfolio").innerText = portfolio.toFixed(0)
+
+saveGame()
+
+}
+
+
+
+/* =================================
+MAIN PRICE LOOP
+================================= */
+
+setInterval(()=>{
+
+updatePrices()
+processPendingEvents()
+stockSplitCheck()
+
+if(!userTrading){
+render()
+}
+
+},10000)
+
+
+/* =================================
+SECTOR NEWS TIMER
+================================= */
+
+setInterval(()=>{
+
+sectorNews()
+
+},120000)
+
+
+
+/* =================================
+STOCK NEWS TIMER
+================================= */
+
+setInterval(()=>{
+
+stockNews()
+
+},240000)
+
+
+
+/* =================================
+DIVIDEND TIMER
+================================= */
+
+setInterval(()=>{
+
+dividendEvent()
+
+},180000)
+
+
+
+/* =================================
+IPO TIMER
+================================= */
+
+setInterval(()=>{
+
+if(Math.random()<0.4){
+
+ipoEvent()
+
+}
+
+},360000)
+
+
+
+/* =================================
+MARKET CONDITION TIMER
+================================= */
+
+setInterval(()=>{
+
+marketChange()
+
+},300000)
+
+
+
+/* =================================
+INITIALIZATION
+================================= */
+
+loadGame()
+
+initVolume()
+
+marketChange()
+
+render()
+
+setTimeout(()=>{
+document.getElementById("intro").style.display="none"
+},2500)
+
+</script>
+</body>
+</html>
+
